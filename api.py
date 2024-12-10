@@ -5,15 +5,35 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, validator, constr
 import re
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 app = FastAPI(title="Temperature Aggregation API")
 
-# ISO 8601 format patterns
-ISO_PATTERNS = [
-    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$',                    # Basic: 2024-01-01T00:00:00
-    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$',           # With milliseconds and Z: 2024-01-01T00:00:00.000Z
-    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$'  # With timezone: 2024-01-01T00:00:00.000+00:00
-]
+def parse_datetime(value: str) -> datetime:
+    """
+    Parse datetime string in various ISO 8601 formats and convert to UTC.
+    Handles the following formats:
+    - 2024-01-01T00:00:00
+    - 2024-01-01T00:00:00.000Z
+    - 2024-01-01T00:00:00.000+00:00
+    """
+    try:
+        # Handle the basic format without timezone
+        if re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$', value):
+            return datetime.fromisoformat(value)
+            
+        # Handle Z suffix
+        if value.endswith('Z'):
+            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+            
+        # Handle explicit timezone
+        if re.match(r'.*[+-]\d{2}:\d{2}$', value):
+            dt = datetime.fromisoformat(value)
+            return dt.astimezone(ZoneInfo('UTC'))
+            
+        raise ValueError("Invalid datetime format")
+    except Exception as e:
+        raise ValueError(f"Invalid datetime format: {str(e)}")
 
 # Load the data once when starting the service
 try:
@@ -47,15 +67,6 @@ class HealthResponse(BaseModel):
     total_records: int
     time_range: dict
 
-def validate_iso_datetime(value: str) -> datetime:
-    """Validate that the datetime string matches one of our ISO patterns"""
-    if not any(re.match(pattern, value) for pattern in ISO_PATTERNS):
-        raise ValueError("Invalid datetime format. Must be ISO 8601 format (e.g., 2024-01-01T00:00:00)")
-    try:
-        return datetime.fromisoformat(value.replace('Z', '+00:00'))
-    except ValueError as e:
-        raise ValueError(f"Invalid datetime: {str(e)}")
-
 @app.get(
     "/aggregate",
     response_model=AggregationResponse,
@@ -70,12 +81,12 @@ def validate_iso_datetime(value: str) -> datetime:
 async def aggregate_temperatures(
     start_time: str = Query(
         ...,
-        description="Start time (ISO 8601 format, e.g., 2024-01-01T12:00:00)",
+        description="Start time (ISO 8601 format)",
         example="2024-01-01T12:00:00"
     ),
     end_time: str = Query(
         ...,
-        description="End time (ISO 8601 format, e.g., 2024-01-01T15:00:00)",
+        description="End time (ISO 8601 format)",
         example="2024-01-01T15:00:00"
     ),
     resolution: int = Query(
@@ -89,10 +100,9 @@ async def aggregate_temperatures(
     """
     Aggregate temperature data for a given time window and resolution.
     """
-    # Validate datetime formats and convert to datetime objects
     try:
-        start_dt = validate_iso_datetime(start_time)
-        end_dt = validate_iso_datetime(end_time)
+        start_dt = parse_datetime(start_time)
+        end_dt = parse_datetime(end_time)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -120,15 +130,6 @@ async def aggregate_temperatures(
             detail="Resolution cannot be larger than the time window"
         )
 
-    # Check if time range is within data bounds
-    data_start = df.index.min()
-    data_end = df.index.max()
-    if start_dt < data_start or end_dt > data_end:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Data only available from {data_start.isoformat()} to {data_end.isoformat()}"
-        )
-
     # Filter data for the requested time window
     mask = (df.index >= start_dt) & (df.index < end_dt)
     window_data = df.loc[mask]
@@ -140,20 +141,14 @@ async def aggregate_temperatures(
         )
 
     # Resample and aggregate data
-    try:
-        resampled = window_data.resample(
-            f'{resolution}S',
-            closed='left',
-            label='left'
-        ).agg({
-            'ambient_temperature': ['mean', 'min', 'max'],
-            'device_temperature': ['mean', 'min', 'max']
-        })
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error during data aggregation: {str(e)}"
-        )
+    resampled = window_data.resample(
+        f'{resolution}S',
+        closed='left',
+        label='left'
+    ).agg({
+        'ambient_temperature': ['mean', 'min', 'max'],
+        'device_temperature': ['mean', 'min', 'max']
+    })
 
     # Flatten column names
     resampled.columns = [
