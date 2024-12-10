@@ -72,10 +72,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Generate test data
-      run: |
-        python generate_temperature_data.py
-      
     - name: Build Docker image
       run: docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
       
