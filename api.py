@@ -2,10 +2,18 @@ from fastapi import FastAPI, Query, HTTPException, status
 from datetime import datetime
 import pandas as pd
 from typing import List, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, constr
+import re
 from datetime import datetime, timedelta
 
 app = FastAPI(title="Temperature Aggregation API")
+
+# ISO 8601 format patterns
+ISO_PATTERNS = [
+    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$',                    # Basic: 2024-01-01T00:00:00
+    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$',           # With milliseconds and Z: 2024-01-01T00:00:00.000Z
+    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$'  # With timezone: 2024-01-01T00:00:00.000+00:00
+]
 
 # Load the data once when starting the service
 try:
@@ -39,6 +47,15 @@ class HealthResponse(BaseModel):
     total_records: int
     time_range: dict
 
+def validate_iso_datetime(value: str) -> datetime:
+    """Validate that the datetime string matches one of our ISO patterns"""
+    if not any(re.match(pattern, value) for pattern in ISO_PATTERNS):
+        raise ValueError("Invalid datetime format. Must be ISO 8601 format (e.g., 2024-01-01T00:00:00)")
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError as e:
+        raise ValueError(f"Invalid datetime: {str(e)}")
+
 @app.get(
     "/aggregate",
     response_model=AggregationResponse,
@@ -51,12 +68,12 @@ class HealthResponse(BaseModel):
     }
 )
 async def aggregate_temperatures(
-    start_time: datetime = Query(
+    start_time: str = Query(
         ...,
         description="Start time (ISO 8601 format, e.g., 2024-01-01T12:00:00)",
         example="2024-01-01T12:00:00"
     ),
-    end_time: datetime = Query(
+    end_time: str = Query(
         ...,
         description="End time (ISO 8601 format, e.g., 2024-01-01T15:00:00)",
         example="2024-01-01T15:00:00"
@@ -72,6 +89,16 @@ async def aggregate_temperatures(
     """
     Aggregate temperature data for a given time window and resolution.
     """
+    # Validate datetime formats and convert to datetime objects
+    try:
+        start_dt = validate_iso_datetime(start_time)
+        end_dt = validate_iso_datetime(end_time)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+
     if df is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -79,14 +106,14 @@ async def aggregate_temperatures(
         )
     
     # Validate time range
-    if end_time <= start_time:
+    if end_dt <= start_dt:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="End time must be after start time"
         )
 
     # Validate resolution with time window
-    time_diff = end_time - start_time
+    time_diff = end_dt - start_dt
     if time_diff.total_seconds() < resolution:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -96,14 +123,14 @@ async def aggregate_temperatures(
     # Check if time range is within data bounds
     data_start = df.index.min()
     data_end = df.index.max()
-    if start_time < data_start or end_time > data_end:
+    if start_dt < data_start or end_dt > data_end:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Data only available from {data_start.isoformat()} to {data_end.isoformat()}"
         )
 
     # Filter data for the requested time window
-    mask = (df.index >= start_time) & (df.index < end_time)
+    mask = (df.index >= start_dt) & (df.index < end_dt)
     window_data = df.loc[mask]
     
     if window_data.empty:
@@ -152,8 +179,8 @@ async def aggregate_temperatures(
     
     return {
         'resolution_seconds': resolution,
-        'start_time': start_time.isoformat(),
-        'end_time': end_time.isoformat(),
+        'start_time': start_dt.isoformat(),
+        'end_time': end_dt.isoformat(),
         'data_points': len(result),
         'aggregated_data': result
     }
