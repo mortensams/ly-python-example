@@ -1,0 +1,13 @@
+numpy
+pandas
+fastapi
+uvicorn
+python-dateutil
+pydantic
+typing-extensions
+pytest
+pytest-cov
+requests
+black
+flake8
+pylint
