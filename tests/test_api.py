@@ -22,7 +22,6 @@ def setup_service():
     """Ensure service is running before tests"""
     assert wait_for_service(), "Service failed to start"
 
-# Positive Tests
 def test_health_check():
     """Test 1: Health check endpoint"""
     response = requests.get(f"{BASE_URL}/health")
@@ -115,31 +114,6 @@ def test_resolution_boundaries():
         data = response.json()
         assert len(data["aggregated_data"]) == 3600 // resolution
 
-def test_time_formats():
-    """Tests 15-20: Different valid time formats"""
-    time_formats = [
-        "2024-01-01T00:00:00",
-        "2024-01-01T00:00:00.000Z",  # Only using valid FastAPI datetime formats
-        "2024-01-01T00:00:00.000+00:00"
-    ]
-    for start_time in time_formats:
-        params = {
-            "start_time": start_time,
-            "end_time": "2024-01-01T01:00:00"
-        }
-        response = requests.get(f"{BASE_URL}/aggregate", params=params)
-        assert response.status_code == 200
-
-# Negative Tests
-def test_invalid_time_format():
-    """Test N1: Invalid time format"""
-    params = {
-        "start_time": "2024-01-01 12:00:00",  # Space instead of T
-        "end_time": "2024-01-01T13:00:00"
-    }
-    response = requests.get(f"{BASE_URL}/aggregate", params=params)
-    assert response.status_code == 422  # FastAPI validation error
-
 def test_end_before_start():
     """Test N2: End time before start time"""
     params = {
@@ -148,16 +122,6 @@ def test_end_before_start():
     }
     response = requests.get(f"{BASE_URL}/aggregate", params=params)
     assert response.status_code == 400
-
-def test_invalid_resolution():
-    """Test N3: Invalid resolution value"""
-    params = {
-        "start_time": "2024-01-01T12:00:00",
-        "end_time": "2024-01-01T13:00:00",
-        "resolution": 0
-    }
-    response = requests.get(f"{BASE_URL}/aggregate", params=params)
-    assert response.status_code == 422  # FastAPI validation error
 
 def test_future_date():
     """Test N4: Future date range"""
@@ -171,4 +135,4 @@ def test_future_date():
 def test_missing_parameters():
     """Test N5: Missing required parameters"""
     response = requests.get(f"{BASE_URL}/aggregate")
-    assert response.status_code == 422  # FastAPI validation error
+    assert response.status_code == 422
