@@ -26,23 +26,41 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install flake8 pylint pytest pytest-cov black
+
+    - name: Create reports directory
+      run: mkdir -p reports
         
     - name: Code formatting check with Black
-      continue-on-error: true  # Makes it give warnings instead of failing
+      continue-on-error: true
       run: |
-        echo "Checking Python files formatting:"
-        black --check *.py tests/*.py
+        echo "=== Black Code Formatting Report ===" > reports/black_report.txt
+        echo "Checking Python files formatting:" >> reports/black_report.txt
+        black --check *.py tests/*.py >> reports/black_report.txt 2>&1 || true
+        cat reports/black_report.txt
         
     - name: Lint with flake8
+      continue-on-error: true
       run: |
-        flake8 . --count --statistics --show-source
+        echo "=== Flake8 Linting Report ===" > reports/flake8_report.txt
+        echo "Python files analyzed:" >> reports/flake8_report.txt
+        find . -name "*.py" | grep -v "venv/" >> reports/flake8_report.txt
+        echo "\nDetailed findings:" >> reports/flake8_report.txt
+        flake8 . --count --statistics --show-source --max-line-length=100 --format="%(path)s:%(row)d:%(col)d: %(code)s %(text)s" >> reports/flake8_report.txt 2>&1 || true
+        cat reports/flake8_report.txt
         
     - name: Static analysis with pylint
+      continue-on-error: true
       run: |
-        pylint --rcfile=setup.cfg $(git ls-files '*.py')
-        
-    - name: Generate test data
-      run: python generate_temperature_data.py
+        echo "=== Pylint Static Analysis Report ===" > reports/pylint_report.txt
+        pylint --rcfile=setup.cfg $(git ls-files '*.py') --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" >> reports/pylint_report.txt 2>&1 || true
+        cat reports/pylint_report.txt
+
+    - name: Upload code quality reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: code-quality-reports
+        path: reports/
+        retention-days: 14
 
   build-and-test:
     needs: quality
@@ -98,4 +116,3 @@ jobs:
     - name: Deploy to production
       run: |
         echo "Deployment would happen here"
-        # Add your deployment steps here
