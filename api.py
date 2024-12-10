@@ -2,8 +2,8 @@ from fastapi import FastAPI, Query, HTTPException
 from datetime import datetime
 import pandas as pd
 from typing import Optional
-from pydantic import BaseModel, Field
-from datetime import datetime
+from pydantic import BaseModel, Field, validator
+from datetime import datetime, timedelta
 
 app = FastAPI(title="Temperature Aggregation API")
 
@@ -28,6 +28,7 @@ async def aggregate_temperatures(
     ),
     resolution: int = Query(
         default=60,
+        gt=0,  # Must be greater than 0
         description="Aggregation resolution in seconds"
     )
 ):
@@ -44,8 +45,12 @@ async def aggregate_temperatures(
             detail="End time must be after start time"
         )
 
+    # Make end_time exclusive to fix off-by-one issues
+    end_time_exclusive = end_time
+    start_time_inclusive = start_time
+
     # Filter data for the requested time window
-    mask = (df.index >= start_time) & (df.index <= end_time)
+    mask = (df.index >= start_time_inclusive) & (df.index < end_time_exclusive)
     window_data = df.loc[mask]
     
     if window_data.empty:
@@ -55,7 +60,7 @@ async def aggregate_temperatures(
         )
 
     # Resample and aggregate data
-    resampled = window_data.resample(f'{resolution}S').agg({
+    resampled = window_data.resample(f'{resolution}S', closed='left', label='left').agg({
         'ambient_temperature': ['mean', 'min', 'max'],
         'device_temperature': ['mean', 'min', 'max']
     })
