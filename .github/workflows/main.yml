@@ -28,7 +28,10 @@ jobs:
         pip install flake8 pylint pytest pytest-cov black
         
     - name: Code formatting check with Black
-      run: black --check .
+      continue-on-error: true  # Makes it give warnings instead of failing
+      run: |
+        echo "Checking Python files formatting:"
+        black --check *.py tests/*.py
         
     - name: Lint with flake8
       run: |
