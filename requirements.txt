@@ -12,4 +12,3 @@ requests
 flake8
 pylint
 mypy
-plotly
