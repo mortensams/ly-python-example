@@ -8,6 +8,6 @@ typing-extensions
 pytest
 pytest-cov
 requests
-black
 flake8
 pylint
+mypy

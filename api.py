@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 app = FastAPI(title="Temperature Aggregation API")
 
+
 def parse_datetime(value: str) -> datetime:
     """
     Parse datetime string in various ISO 8601 formats and convert to UTC.
@@ -46,6 +47,7 @@ def parse_datetime(value: str) -> datetime:
     except Exception as e:
         raise ValueError(f"Invalid datetime format: {str(e)}") from e
 
+
 # Load the data once when starting the service
 try:
     DATA_FRAME = pd.read_csv('temperature_data.csv')
@@ -55,17 +57,20 @@ except Exception as e:
     print(f"Error loading data: {e}")
     DATA_FRAME = None
 
+
 class TemperatureStats(BaseModel):
     """Statistics for temperature measurements including mean, min, and max values."""
     mean: float
     min: float
     max: float
 
+
 class AggregatedDataPoint(BaseModel):
     """Single data point containing timestamp and temperature statistics."""
     timestamp: str
     ambient_temperature: TemperatureStats
     device_temperature: TemperatureStats
+
 
 class AggregationResponse(BaseModel):
     """Response model for temperature aggregation endpoint."""
@@ -75,12 +80,14 @@ class AggregationResponse(BaseModel):
     data_points: int
     aggregated_data: List[AggregatedDataPoint]
 
+
 class HealthResponse(BaseModel):
     """Response model for health check endpoint."""
     status: str
     data_loaded: bool
     total_records: int
     time_range: dict
+
 
 @app.get(
     "/aggregate",
@@ -114,7 +121,7 @@ async def aggregate_temperatures(
 ):
     """
     Aggregate temperature data for a given time window and resolution.
-    
+
     Args:
         start_time: Start of the time window in ISO format
         end_time: End of the time window in ISO format
@@ -203,6 +210,7 @@ async def aggregate_temperatures(
         'aggregated_data': result
     }
 
+
 @app.get(
     "/health",
     response_model=HealthResponse,
@@ -228,6 +236,7 @@ async def health_check():
             "end": DATA_FRAME.index.max().isoformat()
         }
     }
+
 
 if __name__ == "__main__":
     import uvicorn

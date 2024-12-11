@@ -25,18 +25,9 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install flake8 pylint pytest pytest-cov black
-
+        
     - name: Create reports directory
       run: mkdir -p reports
-        
-    - name: Code formatting check with Black
-      continue-on-error: true
-      run: |
-        echo "=== Black Code Formatting Report ===" > reports/black_report.txt
-        echo "Checking Python files formatting:" >> reports/black_report.txt
-        black --check *.py tests/*.py >> reports/black_report.txt 2>&1 || true
-        cat reports/black_report.txt
         
     - name: Lint with flake8
       continue-on-error: true
@@ -89,7 +80,27 @@ jobs:
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml
-        
+
+    - name: Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        format: spdx-json
+        artifact-name: sbom.spdx.json
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+    - name: Run Vulnerability Scan
+      uses: anchore/scan-action@v3
+      id: scan
+      with:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        fail-build: false
+        severity-cutoff: high
+
+    - name: Upload vulnerability report
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: ${{ steps.scan.outputs.sarif }}
+
     - name: Log in to GitHub Container Registry
       uses: docker/login-action@v2
       with:

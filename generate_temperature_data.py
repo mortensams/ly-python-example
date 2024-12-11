@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+
 # Set random seed for reproducibility
 np.random.seed(42)
 
@@ -24,9 +25,11 @@ timestamps = [START_TIME + timedelta(seconds=x) for x in range(TOTAL_SECONDS)]
 time_hours = np.arange(TOTAL_SECONDS) / 3600
 
 # Create smooth daily temperature cycle with noise
-ambient_temp = (BASE_TEMP +
-               DAILY_VARIATION * np.sin(2 * np.pi * time_hours / 24) +
-               NOISE_AMPLITUDE * np.random.randn(TOTAL_SECONDS))
+ambient_temp = (
+    BASE_TEMP +
+    DAILY_VARIATION * np.sin(2 * np.pi * time_hours / 24) +
+    NOISE_AMPLITUDE * np.random.randn(TOTAL_SECONDS)
+)
 
 # Constants for device temperature
 BASE_DEVICE_TEMP = 55  # Base device temperature
@@ -34,9 +37,11 @@ DEVICE_TEMP_FACTOR = 2  # How much ambient temperature changes affect device
 DEVICE_NOISE = 0.5  # Additional noise for device temperature
 
 # Generate device temperature that correlates with ambient temperature
-device_temp = (BASE_DEVICE_TEMP +
-              DEVICE_TEMP_FACTOR * (ambient_temp - BASE_TEMP) +
-              DEVICE_NOISE * np.random.randn(TOTAL_SECONDS))
+device_temp = (
+    BASE_DEVICE_TEMP +
+    DEVICE_TEMP_FACTOR * (ambient_temp - BASE_TEMP) +
+    DEVICE_NOISE * np.random.randn(TOTAL_SECONDS)
+)
 
 # Constants for temperature spikes
 NUM_SPIKES = 8
