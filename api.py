@@ -12,19 +12,22 @@ import pandas as pd
 from fastapi import FastAPI, Query, HTTPException, status
 from pydantic import BaseModel, Field
 
+# Service metadata
+DESCRIPTION = """
+This API provides temperature data analysis and aggregation capabilities.
+It handles both ambient and device temperatures, allowing for flexible time windows
+and aggregation resolutions.
+
+Key features:
+* Time-based data aggregation
+* Configurable resolution (time buckets)
+* Statistical analysis (min, max, mean)
+* Health monitoring
+"""
+
 app = FastAPI(
     title="Temperature Analysis API",
-    description="""
-    This API provides temperature data analysis and aggregation capabilities.
-    It handles both ambient and device temperatures, allowing for flexible time windows
-    and aggregation resolutions.
-    
-    Key features:
-    * Time-based data aggregation
-    * Configurable resolution (time buckets)
-    * Statistical analysis (min, max, mean)
-    * Health monitoring
-    """,
+    description=DESCRIPTION,
     version="1.0.0",
     contact={
         "name": "Your Name",
@@ -41,8 +44,7 @@ app = FastAPI(
 def parse_datetime(value: str) -> datetime:
     """
     Parse datetime string in various ISO 8601 formats and convert to UTC.
-    Handles basic ISO format, UTC Z suffix, and explicit timezone.
-
+    
     Args:
         value: Datetime string in ISO 8601 format
 
@@ -83,29 +85,30 @@ except Exception as e:
 
 class TemperatureStats(BaseModel):
     """Statistics for temperature measurements including mean, min, and max values."""
-    mean: float = Field(..., description="Average temperature for the time window")
-    min: float = Field(..., description="Minimum temperature in the time window")
-    max: float = Field(..., description="Maximum temperature in the time window")
+    mean: float = Field(description="Average temperature for the time window")
+    min: float = Field(description="Minimum temperature in the time window")
+    max: float = Field(description="Maximum temperature in the time window")
 
-    class Config:
-        schema_extra = {
-            "example": {
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
                 "mean": 22.5,
                 "min": 21.0,
                 "max": 24.0
-            }
+            }]
         }
+    }
 
 
 class AggregatedDataPoint(BaseModel):
     """Single data point containing timestamp and temperature statistics."""
-    timestamp: str = Field(..., description="ISO 8601 formatted timestamp")
-    ambient_temperature: TemperatureStats = Field(..., description="Ambient temperature statistics")
-    device_temperature: TemperatureStats = Field(..., description="Device temperature statistics")
+    timestamp: str = Field(description="ISO 8601 formatted timestamp")
+    ambient_temperature: TemperatureStats = Field(description="Ambient temperature statistics")
+    device_temperature: TemperatureStats = Field(description="Device temperature statistics")
 
-    class Config:
-        schema_extra = {
-            "example": {
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
                 "timestamp": "2024-01-01T12:00:00",
                 "ambient_temperature": {
                     "mean": 22.5,
@@ -117,21 +120,22 @@ class AggregatedDataPoint(BaseModel):
                     "min": 53.0,
                     "max": 58.0
                 }
-            }
+            }]
         }
+    }
 
 
 class AggregationResponse(BaseModel):
     """Response model for temperature aggregation endpoint."""
-    resolution_seconds: int = Field(..., description="Time bucket size in seconds")
-    start_time: str = Field(..., description="Start of the aggregation window (ISO 8601)")
-    end_time: str = Field(..., description="End of the aggregation window (ISO 8601)")
-    data_points: int = Field(..., description="Number of data points in response")
-    aggregated_data: List[AggregatedDataPoint] = Field(..., description="Aggregated temperature data")
+    resolution_seconds: int = Field(description="Time bucket size in seconds")
+    start_time: str = Field(description="Start of the aggregation window (ISO 8601)")
+    end_time: str = Field(description="End of the aggregation window (ISO 8601)")
+    data_points: int = Field(description="Number of data points in response")
+    aggregated_data: List[AggregatedDataPoint] = Field(description="Aggregated temperature data")
 
-    class Config:
-        schema_extra = {
-            "example": {
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
                 "resolution_seconds": 300,
                 "start_time": "2024-01-01T12:00:00",
                 "end_time": "2024-01-01T13:00:00",
@@ -151,20 +155,21 @@ class AggregationResponse(BaseModel):
                         }
                     }
                 ]
-            }
+            }]
         }
+    }
 
 
 class HealthResponse(BaseModel):
     """Response model for health check endpoint."""
-    status: str = Field(..., description="Service health status (healthy/unhealthy)")
-    data_loaded: bool = Field(..., description="Whether temperature data is loaded")
-    total_records: int = Field(..., description="Total number of temperature records")
-    time_range: Dict[str, str] = Field(..., description="Available data time range")
+    status: str = Field(description="Service health status (healthy/unhealthy)")
+    data_loaded: bool = Field(description="Whether temperature data is loaded")
+    total_records: int = Field(description="Total number of temperature records")
+    time_range: Dict[str, str] = Field(description="Available data time range")
 
-    class Config:
-        schema_extra = {
-            "example": {
+    model_config = {
+        "json_schema_extra": {
+            "examples": [{
                 "status": "healthy",
                 "data_loaded": True,
                 "total_records": 172800,
@@ -172,8 +177,9 @@ class HealthResponse(BaseModel):
                     "start": "2024-01-01T00:00:00",
                     "end": "2024-01-02T23:59:59"
                 }
-            }
+            }]
         }
+    }
 
 
 @app.get(
@@ -182,35 +188,18 @@ class HealthResponse(BaseModel):
     responses={
         status.HTTP_200_OK: {
             "description": "Successfully aggregated temperature data",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "resolution_seconds": 300,
-                        "start_time": "2024-01-01T12:00:00",
-                        "end_time": "2024-01-01T13:00:00",
-                        "data_points": 12,
-                        "aggregated_data": [{
-                            "timestamp": "2024-01-01T12:00:00",
-                            "ambient_temperature": {
-                                "mean": 22.5,
-                                "min": 21.0,
-                                "max": 24.0
-                            },
-                            "device_temperature": {
-                                "mean": 55.5,
-                                "min": 53.0,
-                                "max": 58.0
-                            }
-                        }]
-                    }
-                }
-            }
+            "model": AggregationResponse
         },
         status.HTTP_400_BAD_REQUEST: {
             "description": "Invalid request parameters",
             "content": {
                 "application/json": {
-                    "example": {"detail": "End time must be after start time"}
+                    "examples": {
+                        "invalid_time_range": {
+                            "summary": "Invalid time range",
+                            "value": {"detail": "End time must be after start time"}
+                        }
+                    }
                 }
             }
         },
@@ -218,7 +207,12 @@ class HealthResponse(BaseModel):
             "description": "No data found",
             "content": {
                 "application/json": {
-                    "example": {"detail": "No data found for the specified time range"}
+                    "examples": {
+                        "no_data": {
+                            "summary": "No data in range",
+                            "value": {"detail": "No data found for the specified time range"}
+                        }
+                    }
                 }
             }
         },
@@ -226,7 +220,12 @@ class HealthResponse(BaseModel):
             "description": "Validation error",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Invalid datetime format"}
+                    "examples": {
+                        "invalid_format": {
+                            "summary": "Invalid datetime format",
+                            "value": {"detail": "Invalid datetime format"}
+                        }
+                    }
                 }
             }
         },
@@ -234,7 +233,12 @@ class HealthResponse(BaseModel):
             "description": "Server error",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Data file not loaded"}
+                    "examples": {
+                        "data_not_loaded": {
+                            "summary": "Data not loaded",
+                            "value": {"detail": "Data file not loaded"}
+                        }
+                    }
                 }
             }
         }
@@ -258,24 +262,24 @@ class HealthResponse(BaseModel):
 )
 async def aggregate_temperatures(
     start_time: str = Query(
-        ...,
-        description="Start time in ISO 8601 format (e.g., 2024-01-01T12:00:00)",
-        example="2024-01-01T12:00:00"
+        description="Start time in ISO 8601 format",
+        examples=["2024-01-01T12:00:00"]
     ),
     end_time: str = Query(
-        ...,
-        description="End time in ISO 8601 format (e.g., 2024-01-01T13:00:00)",
-        example="2024-01-01T13:00:00"
+        description="End time in ISO 8601 format",
+        examples=["2024-01-01T13:00:00"]
     ),
     resolution: int = Query(
         default=60,
         gt=0,
         le=86400,  # Max 1 day resolution
         description="Aggregation resolution in seconds (1 to 86400)",
-        example=300
+        examples=[300]
     )
 ) -> AggregationResponse:
-    """Aggregate temperature data for a given time window and resolution."""
+    """
+    Aggregate temperature data for a given time window and resolution.
+    """
     try:
         start_dt = parse_datetime(start_time)
         end_dt = parse_datetime(end_time)
@@ -363,26 +367,17 @@ async def aggregate_temperatures(
     responses={
         status.HTTP_200_OK: {
             "description": "Service is healthy",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "healthy",
-                        "data_loaded": True,
-                        "total_records": 172800,
-                        "time_range": {
-                            "start": "2024-01-01T00:00:00",
-                            "end": "2024-01-02T23:59:59"
-                        }
-                    }
-                }
-            }
+            "model": HealthResponse
         },
         status.HTTP_500_INTERNAL_SERVER_ERROR: {
             "description": "Service is unhealthy",
             "content": {
                 "application/json": {
-                    "example": {
-                        "detail": "Service unhealthy - data not loaded"
+                    "examples": {
+                        "unhealthy": {
+                            "summary": "Data not loaded",
+                            "value": {"detail": "Service unhealthy - data not loaded"}
+                        }
                     }
                 }
             }
