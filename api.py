@@ -1,60 +1,74 @@
-from fastapi import FastAPI, Query, HTTPException, status
-from datetime import datetime
-import pandas as pd
-from typing import List, Optional
-from pydantic import BaseModel, Field, validator, constr
+"""
+FastAPI service for aggregating and analyzing temperature time series data.
+Provides endpoints for data aggregation with flexible time windows and resolutions.
+"""
+
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import List
 from zoneinfo import ZoneInfo
+
+import pandas as pd
+from fastapi import FastAPI, Query, HTTPException, status
+from pydantic import BaseModel
 
 app = FastAPI(title="Temperature Aggregation API")
 
 def parse_datetime(value: str) -> datetime:
     """
     Parse datetime string in various ISO 8601 formats and convert to UTC.
-    Handles the following formats:
-    - 2024-01-01T00:00:00
-    - 2024-01-01T00:00:00.000Z
-    - 2024-01-01T00:00:00.000+00:00
+    Handles basic ISO format, UTC Z suffix, and explicit timezone.
+
+    Args:
+        value: Datetime string in ISO 8601 format
+
+    Returns:
+        datetime: Parsed datetime object
+
+    Raises:
+        ValueError: If datetime format is invalid
     """
     try:
-        # Handle the basic format without timezone
+        # Handle basic format
         if re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$', value):
             return datetime.fromisoformat(value)
-            
+
         # Handle Z suffix
         if value.endswith('Z'):
             return datetime.fromisoformat(value.replace('Z', '+00:00'))
-            
+
         # Handle explicit timezone
         if re.match(r'.*[+-]\d{2}:\d{2}$', value):
             dt = datetime.fromisoformat(value)
             return dt.astimezone(ZoneInfo('UTC'))
-            
+
         raise ValueError("Invalid datetime format")
     except Exception as e:
-        raise ValueError(f"Invalid datetime format: {str(e)}")
+        raise ValueError(f"Invalid datetime format: {str(e)}") from e
 
 # Load the data once when starting the service
 try:
-    df = pd.read_csv('temperature_data.csv')
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.set_index('timestamp', inplace=True)
+    DATA_FRAME = pd.read_csv('temperature_data.csv')
+    DATA_FRAME['timestamp'] = pd.to_datetime(DATA_FRAME['timestamp'])
+    DATA_FRAME.set_index('timestamp', inplace=True)
 except Exception as e:
     print(f"Error loading data: {e}")
-    df = None
+    DATA_FRAME = None
 
 class TemperatureStats(BaseModel):
+    """Statistics for temperature measurements including mean, min, and max values."""
     mean: float
     min: float
     max: float
 
 class AggregatedDataPoint(BaseModel):
+    """Single data point containing timestamp and temperature statistics."""
     timestamp: str
     ambient_temperature: TemperatureStats
     device_temperature: TemperatureStats
 
 class AggregationResponse(BaseModel):
+    """Response model for temperature aggregation endpoint."""
     resolution_seconds: int
     start_time: str
     end_time: str
@@ -62,6 +76,7 @@ class AggregationResponse(BaseModel):
     aggregated_data: List[AggregatedDataPoint]
 
 class HealthResponse(BaseModel):
+    """Response model for health check endpoint."""
     status: str
     data_loaded: bool
     total_records: int
@@ -99,6 +114,14 @@ async def aggregate_temperatures(
 ):
     """
     Aggregate temperature data for a given time window and resolution.
+    
+    Args:
+        start_time: Start of the time window in ISO format
+        end_time: End of the time window in ISO format
+        resolution: Time bucket size in seconds
+
+    Returns:
+        Dict containing aggregated temperature data
     """
     try:
         start_dt = parse_datetime(start_time)
@@ -107,14 +130,14 @@ async def aggregate_temperatures(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e)
-        )
+        ) from e
 
-    if df is None:
+    if DATA_FRAME is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Data file not loaded"
         )
-    
+
     # Validate time range
     if end_dt <= start_dt:
         raise HTTPException(
@@ -131,9 +154,9 @@ async def aggregate_temperatures(
         )
 
     # Filter data for the requested time window
-    mask = (df.index >= start_dt) & (df.index < end_dt)
-    window_data = df.loc[mask]
-    
+    mask = (DATA_FRAME.index >= start_dt) & (DATA_FRAME.index < end_dt)
+    window_data = DATA_FRAME.loc[mask]
+
     if window_data.empty:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -154,7 +177,7 @@ async def aggregate_temperatures(
     resampled.columns = [
         f"{col[0]}_{col[1]}" for col in resampled.columns
     ]
-    
+
     # Convert timestamps to ISO format and prepare response
     result = []
     for timestamp, row in resampled.iterrows():
@@ -171,7 +194,7 @@ async def aggregate_temperatures(
                 'max': round(row['device_temperature_max'], 2)
             }
         })
-    
+
     return {
         'resolution_seconds': resolution,
         'start_time': start_dt.isoformat(),
@@ -189,8 +212,8 @@ async def aggregate_temperatures(
     }
 )
 async def health_check():
-    """Check if the service is healthy and data is loaded"""
-    if df is None:
+    """Check if the service is healthy and data is loaded."""
+    if DATA_FRAME is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Service unhealthy - data not loaded"
@@ -199,10 +222,10 @@ async def health_check():
     return {
         "status": "healthy",
         "data_loaded": True,
-        "total_records": len(df),
+        "total_records": len(DATA_FRAME),
         "time_range": {
-            "start": df.index.min().isoformat(),
-            "end": df.index.max().isoformat()
+            "start": DATA_FRAME.index.min().isoformat(),
+            "end": DATA_FRAME.index.max().isoformat()
         }
     }
 
