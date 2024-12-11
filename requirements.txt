@@ -7,6 +7,7 @@ pydantic
 typing-extensions
 pytest
 pytest-cov
+pytest-json-report
 requests
 flake8
 pylint
