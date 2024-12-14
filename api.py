@@ -3,11 +3,7 @@ FastAPI service for aggregating and analyzing temperature time series data.
 Provides endpoints for data aggregation with flexible time windows and resolutions.
 """
 
-import re
-from datetime import datetime
 from typing import List, Dict
-from zoneinfo import ZoneInfo
-
 import pandas as pd
 from fastapi import FastAPI, Query, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,9 +29,10 @@ try:
     DATA_FRAME = pd.read_csv('temperature_data.csv')
     DATA_FRAME['timestamp'] = pd.to_datetime(DATA_FRAME['timestamp']).dt.tz_localize('UTC')
     DATA_FRAME.set_index('timestamp', inplace=True)
-except Exception as e:
-    print(f"Error loading data: {e}")
+except (pd.errors.EmptyDataError, pd.errors.ParserError, OSError) as e:
+    print(f"Error loading data: {str(e)}")
     DATA_FRAME = None
+
 
 class TemperatureStats(BaseModel):
     """Statistics for temperature measurements."""
@@ -43,11 +40,13 @@ class TemperatureStats(BaseModel):
     min: float = Field(description="Minimum temperature")
     max: float = Field(description="Maximum temperature")
 
+
 class AggregatedDataPoint(BaseModel):
     """Single data point with temperature statistics."""
     timestamp: str = Field(description="ISO 8601 timestamp")
     ambient_temperature: TemperatureStats
     device_temperature: TemperatureStats
+
 
 class AggregationResponse(BaseModel):
     """Response model for temperature aggregation."""
@@ -57,6 +56,7 @@ class AggregationResponse(BaseModel):
     data_points: int = Field(description="Number of data points")
     aggregated_data: List[AggregatedDataPoint]
 
+
 class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str = Field(description="Service health status")
@@ -64,8 +64,9 @@ class HealthResponse(BaseModel):
     total_records: int = Field(description="Total number of records")
     time_range: Dict[str, str] = Field(description="Available data time range")
 
+
 @app.get("/health", response_model=HealthResponse)
-@app.head("/health")  # Allow HEAD requests for healthcheck
+@app.head("/health")
 async def health_check() -> HealthResponse:
     """Check if the service is healthy and data is loaded."""
     if DATA_FRAME is None:
@@ -83,6 +84,7 @@ async def health_check() -> HealthResponse:
             "end": DATA_FRAME.index.max().isoformat()
         }
     }
+
 
 @app.get(
     "/aggregate",
@@ -170,6 +172,7 @@ async def aggregate_temperatures(
         'data_points': len(result),
         'aggregated_data': result
     }
+
 
 if __name__ == "__main__":
     import uvicorn
